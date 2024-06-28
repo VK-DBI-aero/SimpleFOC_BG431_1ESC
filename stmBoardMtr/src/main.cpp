@@ -16,57 +16,30 @@ LowsideCurrentSense current_sense = LowsideCurrentSense(0.003f, -64.0/7.0, A_OP1
 
 
 void setup() {
-  
   // pwm frequency to be used [Hz]
   driver.pwm_frequency = 30000;
   // power supply voltage [V]
   driver.voltage_power_supply = 12;
   // Max DC voltage allowed - default voltage_power_supply
   driver.voltage_limit = 12;
-  // daad_zone [0,1] - default 0.02 - 2%
-  driver.dead_zone = 0.05;
+
+  
 
   // driver init
   driver.init();
-  current_sense.linkDriver(&driver);
-
-  motor.init();
-
-  current_sense.init();
-  motor.linkCurrentSense(&current_sense);
-
-  //motor.initFOC();
-
 
   // enable driver
   driver.enable();
-  
-  Serial.begin(115200);
-  Serial.println("Setup ready.");
 
-
+  _delay(1000);
 }
 
 void loop() {
-    // setting pwm
-    // phase A: 3V, phase B: 6V, phase C: 5V
-    // driver.setPwm(6,6,5);
-
-
-    // foc and motion controls
-    //motor.loopFOC();
-    motor.move();
-
-    PhaseCurrent_s currents = current_sense.getPhaseCurrents();
-    float current_magnitude = current_sense.getDCCurrent();
-
-    Serial.print(currents.a*1000); // milli Amps
-    Serial.print("\t");
-    Serial.print(currents.b*1000); // milli Amps
-    Serial.print("\t");
-    Serial.print(currents.c*1000); // milli Amps
-    Serial.print("\t");
-    Serial.println(current_magnitude*1000); // milli Amps
-
-
+    // setting pwm (A: 3V, B: 1V, C: 5V)
+    driver.setPwm(3,1,5);
+    delay(8);
+    driver.setPwm(5,3,1);
+    delay(8);
+    driver.setPwm(1,5,3);
+    delay(8);
 }
