@@ -1,45 +1,34 @@
-// BLDC driver standalone example
-#include <SimpleFOC.h>
 
-// BLDC motor instance BLDCMotor(polepairs, (R), (KV))
-BLDCMotor motor = BLDCMotor(7, .12, 1400);
+#include <Arduino.h>
 
-// BLDC driver instance BLDCDriver6PWM(phA_h, phA_l, phB_h, phB_l, phC_h, phC_l, (en))
-BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
+float target = 0.0;
 
-
-/*current sensor*/ 
-// (shunt resistor value,
-// gain value,
-// pins phase A,B)
-LowsideCurrentSense current_sense = LowsideCurrentSense(0.003f, -64.0/7.0, A_OP1_OUT, A_OP2_OUT, A_OP3_OUT);
-
-
-void setup() {
-  // pwm frequency to be used [Hz]
-  driver.pwm_frequency = 30000;
-  // power supply voltage [V]
-  driver.voltage_power_supply = 12;
-  // Max DC voltage allowed - default voltage_power_supply
-  driver.voltage_limit = 12;
-
-  
-
-  // driver init
-  driver.init();
-
-  // enable driver
-  driver.enable();
-
-  _delay(1000);
+void serialLoop()
+{
+  static String received_chars;
+  while (Serial.available())
+  {
+    char inChar = (char)Serial.read();
+    received_chars += inChar;
+    if (inChar == '\n')
+    {
+      target = received_chars.toFloat();
+      Serial.print("Target = ");
+      Serial.println(target);
+      received_chars = "";
+    }
+  }
 }
 
-void loop() {
-    // setting pwm (A: 3V, B: 1V, C: 5V)
-    driver.setPwm(3,1,5);
-    delay(8);
-    driver.setPwm(5,3,1);
-    delay(8);
-    driver.setPwm(1,5,3);
-    delay(8);
+void setup()
+{
+
+  Serial.begin(115200);
+  
+  delay(1000);
+
+}
+void loop()
+{
+  serialLoop();
 }
