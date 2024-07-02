@@ -41,7 +41,7 @@ void setup()
   // motor.PID_velocity.I = 0.0;
   // motor.LPF_velocity.Tf = 0.01;
 
-  motor.controller = MotionControlType::velocity_openloop;
+  motor.controller = MotionControlType::velocity;
 
   motor.init();
   motor.initFOC();
@@ -65,7 +65,7 @@ void loop()
 
   motor.loopFOC();
   motor.move(radPerSec);
-  motor.monitor();
+  //motor.monitor();
   if (spinIt%1500 == 0 && radPerSec<500){
     radPerSec++;
     spinIt = 1;
