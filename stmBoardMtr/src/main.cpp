@@ -37,10 +37,16 @@ void setup()
   motor.voltage_limit = 14.8;
   motor.velocity_limit = 2212;
 
+  // motor.PID_velocity.P = 0.0;
+  // motor.PID_velocity.I = 0.0;
+  // motor.LPF_velocity.Tf = 0.01;
+
   motor.controller = MotionControlType::velocity_openloop;
 
   motor.init();
   motor.initFOC();
+
+  motor.useMonitoring(Serial);
 
   Serial.begin(115200);
   
@@ -48,20 +54,25 @@ void setup()
 
 }
 
-float target_velocity = 0;
-int rpmIt = 1;
+int spinIt = 1;
+float radPerSec = 0;
 
 void loop()
 {
   serialLoop();
 
+  //motor.PID_velocity.P = target;
+
   motor.loopFOC();
-  motor.move(target);
-  if (rpmIt%1000 == 0 && target<1300){
-    target++;
-    rpmIt = 1;
+  motor.move(radPerSec);
+  motor.monitor();
+  if (spinIt%1500 == 0 && radPerSec<500){
+    radPerSec++;
+    spinIt = 1;
+    // Serial.println(radPerSec*9.549297);
   }
   else{
-    rpmIt++;
+    spinIt++;
   }
+
 }
