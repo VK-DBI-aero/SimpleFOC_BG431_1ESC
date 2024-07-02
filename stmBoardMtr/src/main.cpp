@@ -65,7 +65,6 @@ void loop()
 
   motor.loopFOC();
   motor.move(radPerSec);
-  motor.monitor();
   if (spinIt%1500 == 0 && radPerSec<500){
     radPerSec++;
     spinIt = 1;
