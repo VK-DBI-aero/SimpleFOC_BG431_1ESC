@@ -3,18 +3,28 @@
 #include <SimpleFOC.h>
 #include <string>
 #include "stm32g4xx_hal.h"
+#include <./Arduino-FOC-drivers-master/src/SimpleFOCDrivers.h>
+#include <./Arduino-FOC-drivers-master/src/encoders/MXLEMMING_observer/MXLEMMINGObserverSensor.h>
+#include <./RTTStream-main/src/RTTStream.h>
 
-float target = 0.0;
-int spinIt = 1;
-int spinItSpeed = 1500;
-float radPerSec = 0;
-int mxRads = 0;
-int outIt = 0;
+//local variable definitions
+float target = 0.0;     // used to change currently tested variable
+int spinIt = 1;         // iterator for the startup
+int spinItSpeed = 1500; // rate of the startup, higher = slower
+float radPerSec = 0;    // driver the motor speed
+int mxRads = 0;         // max motor speed
+int outIt = 0;          //used for communication rate iteration
 
-BLDCMotor motor = BLDCMotor(7, .12, 1400);
+//Set up the motor and driver, motor is 7 pp, .12 phase resistor, and 1400KV 
+BLDCMotor motor = BLDCMotor(7, .12, 1400, .000011);
 BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
 
-
+/*controls the motor using the UART. 
+-g starts the motor and revs up to 300 rad/s, 
+-s stops the motor, 
+-and entering a number sets the P in pid to that number
+  -(currently not useful, but implemented for later tuning)
+*/
 void serialControl(){
   static String received_chars;
   while (Serial.available())
@@ -48,81 +58,25 @@ void serialControl(){
   }
 }
 
-void SystemClock_Config(void)
-{
-    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-
-    // Initialize the RCC Oscillators according to the specified parameters in the RCC_OscInitTypeDef structure
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-    RCC_OscInitStruct.PLL.PLLM = 1;
-    RCC_OscInitStruct.PLL.PLLN = 16;
-    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
-    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
-    RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-    {
-        Error_Handler();
-    }
-
-    // Initialize the CPU, AHB and APB buses clocks
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
-                                  RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
-    {
-        Error_Handler();
-    }
-}
-
-void MX_GPIO_Init(void)
-{
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    // Configure GPIO pins for motor phases as analog input
-    GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2; // Example pins
-    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-}
 
 
 
 void setup()
 {
 
-  //HAL_Init();
-  //SystemClock_Config();
-  MX_GPIO_Init();
-  //MX_ADC1_Init();
 
-
-  driver.voltage_power_supply = 12;
+  //initializes the psu and driver
+  driver.voltage_power_supply = 14.8;
   driver.init();
 
   motor.linkDriver(&driver);
-
   motor.voltage_limit = 14.8;
   motor.velocity_limit = 2212;
 
+  //Sets up openloop FOC
   motor.controller = MotionControlType::velocity_openloop;
   // set FOC modulation type to sinusoidal
   motor.foc_modulation = FOCModulationType::SinePWM;
-
-  motor.PID_velocity.P = 0;
-  motor.PID_velocity.I = 0;
-  motor.LPF_velocity.Tf = 0;
-
 
 
   motor.init();
@@ -132,15 +86,16 @@ void setup()
   
   Serial.begin(115200);
   delay(1000);
-\
+
 }
 
 
 void loop()
 {
-
+  //starts the motor moving at radPerSec
   motor.loopFOC();
   motor.move(radPerSec);
+  //this loop controls the rate at which the motor speeds up
   if (spinIt%spinItSpeed == 0 && radPerSec<mxRads){
     radPerSec++;
     spinIt = 1;
@@ -149,10 +104,7 @@ void loop()
     spinIt++;
   }
 
-  motor.PID_velocity.P = target;
   
   serialControl();
-
-
 }
 
