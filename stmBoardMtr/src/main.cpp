@@ -10,7 +10,10 @@ int spinItSpeed = 1500; // rate of the startup, higher = slower
 float radPerSec = 0;    // driver the motor speed
 int mxRads = 0;         // max motor speed
 int outIt = 0;          //used for communication rate iteration
-
+String received_chars;
+#define INCREMENT true
+#define DECREMENT false
+bool opMode = true;
 //Set up the motor and driver, motor is 7 pp, .12 phase resistor, and 1400KV 
 BLDCMotor motor = BLDCMotor(7, .12, 1400);
 BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
@@ -22,28 +25,49 @@ BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHA
   -(currently not useful, but implemented for later tuning)
 */
 void serialControl(){
-  static String received_chars;
   while (Serial.available())
   {
     char inChar = (char)Serial.read();
-    received_chars += inChar;
+    received_chars.concat(inChar);
     if (inChar == '\n')
     {
-      float num = received_chars.toFloat();
-      if(received_chars == "s\n"){
+	  char command = received_chars[0];
+	  received_chars.remove(0,1);
+      float num = received_chars.toInt();
+	  Serial.print("Command == ");
+	  Serial.println(command);
+	  Serial.print("Num == ");
+	  Serial.println(num);
+      if(command == 's'){//stop
         radPerSec = 0;
         mxRads = 0;
         received_chars = "";
         Serial.println("Stopping Motor.");
         break;
       }
-      else if(received_chars == "g\n"){
+      else if(command == 'g'){//go
         radPerSec = 0;
         mxRads = 300;
         received_chars = "";
         Serial.println("Starting Motor.");
         break;
       }
+	  else if(command == 't'){
+		if(mxRads < num){
+			opMode = INCREMENT;
+		}
+		else{
+			opMode = DECREMENT;
+		}
+		mxRads = num;
+		spinIt = 1;
+
+		Serial.print("Changing target speed to ");
+		Serial.print(num*9.549297);
+		Serial.println("RPM.");
+        received_chars = "";
+		break;
+	  }
       else{
         target = num;
         Serial.print("PID.P = ");
@@ -60,7 +84,7 @@ void setup()
   SimpleFOCDebug::enable();
 
   //initializes the psu and driver
-  driver.voltage_power_supply = 12.8;
+  driver.voltage_power_supply = 14.8;
   driver.init();
 
   motor.linkDriver(&driver);
@@ -89,14 +113,26 @@ void loop()
   motor.loopFOC();
   motor.move(radPerSec);
   //this loop controls the rate at which the motor speeds up
-  if (spinIt%spinItSpeed == 0 && radPerSec<mxRads){
-    radPerSec++;
-    spinIt = 1;
+  switch(opMode){
+	case INCREMENT:
+		if (spinIt%spinItSpeed == 0 && radPerSec<mxRads){
+		radPerSec++;
+		spinIt = 1;
+		}
+		else{
+		spinIt++;
+		}
+		break;
+	case DECREMENT:
+		if (spinIt%spinItSpeed == 0 && radPerSec>=mxRads){
+		radPerSec--;
+		spinIt = 1;
+		}
+		else{
+		spinIt++;
+		}
+		break;
   }
-  else{
-    spinIt++;
-  }
-
   //motor.PID_velocity.P = target;
   
   serialControl();
