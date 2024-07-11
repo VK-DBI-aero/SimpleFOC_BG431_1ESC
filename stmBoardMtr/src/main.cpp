@@ -1,36 +1,27 @@
-
 #include <Arduino.h>
 #include <SimpleFOC.h>
+#include <string>
+#include "stm32g4xx_hal.h"
 
-float target = 0.0;
+//local variable definitions
+float target = 0.0;     // used to change currently tested variable
+int spinIt = 1;         // iterator for the startup
+int spinItSpeed = 1500; // rate of the startup, higher = slower
+float radPerSec = 0;    // driver the motor speed
+int mxRads = 0;         // max motor speed
+int outIt = 0;          //used for communication rate iteration
 
+//Set up the motor and driver, motor is 7 pp, .12 phase resistor, and 1400KV 
 BLDCMotor motor = BLDCMotor(7, .12, 1400);
 BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
 
-// user defined function for reading the phase currents
-// returning the value per phase in amps
-PhaseCurrent_s readCurrentSense(){
-  PhaseCurrent_s c;
-  // dummy example only reading analog pins
-  c.a = analogRead(A_OP1_OUT);
-  c.b = analogRead(A_OP2_OUT);
-  c.c = analogRead(A_OP3_OUT); // if no 3rd current sense set it to 0
-  return(c);
-}
-
-// user defined function for intialising the current sense
-// it is optional and if provided it will be called in current_sense.init()
-void initCurrentSense(){
-  pinMode(A0,INPUT);
-  pinMode(A1,INPUT);
-  pinMode(A2,INPUT);
-}
-
-GenericCurrentSense current_sense = GenericCurrentSense(readCurrentSense, initCurrentSense);
-
-
-void serialLoop()
-{
+/*controls the motor using the UART. 
+-g starts the motor and revs up to 300 rad/s, 
+-s stops the motor, 
+-and entering a number sets the P in pid to that number
+  -(currently not useful, but implemented for later tuning)
+*/
+void serialControl(){
   static String received_chars;
   while (Serial.available())
   {
@@ -38,61 +29,75 @@ void serialLoop()
     received_chars += inChar;
     if (inChar == '\n')
     {
-      target = received_chars.toFloat();
-      Serial.print("Target = ");
-      Serial.println(target);
-      received_chars = "";
+      float num = received_chars.toFloat();
+      if(received_chars == "s\n"){
+        radPerSec = 0;
+        mxRads = 0;
+        received_chars = "";
+        Serial.println("Stopping Motor.");
+        break;
+      }
+      else if(received_chars == "g\n"){
+        radPerSec = 0;
+        mxRads = 300;
+        received_chars = "";
+        Serial.println("Starting Motor.");
+        break;
+      }
+      else{
+        target = num;
+        Serial.print("PID.P = ");
+        Serial.println(target);
+        received_chars = "";
+      }    
     }
   }
 }
 
-
 void setup()
 {
+  Serial.begin(115200);
+  SimpleFOCDebug::enable();
 
-  driver.voltage_power_supply = 12;
+  //initializes the psu and driver
+  driver.voltage_power_supply = 12.8;
   driver.init();
 
   motor.linkDriver(&driver);
-  current_sense.linkDriver(&driver);
-
   motor.voltage_limit = 14.8;
   motor.velocity_limit = 2212;
 
+  //Sets up openloop FOC
   motor.controller = MotionControlType::velocity_openloop;
+  // set FOC modulation type to sinusoidal
+  motor.foc_modulation = FOCModulationType::SinePWM;
+
 
   motor.init();
+
   motor.initFOC();
 
-  motor.useMonitoring(Serial);
-  motor.monitor_variables = _MON_VEL, _MON_CURR_D, _MON_CURR_Q;
-  motor.monitor_downsample = 10000; // default 10
-
-  Serial.begin(115200);
   
   delay(1000);
 
 }
 
-int spinIt = 1;
-float radPerSec = 0;
 
 void loop()
 {
-  serialLoop();
-
-  //motor.PID_velocity.P = target;
-
+  //starts the motor moving at radPerSec
   motor.loopFOC();
   motor.move(radPerSec);
-  motor.monitor();
-  if (spinIt%1500 == 0 && radPerSec<500){
+  //this loop controls the rate at which the motor speeds up
+  if (spinIt%spinItSpeed == 0 && radPerSec<mxRads){
     radPerSec++;
     spinIt = 1;
-    // Serial.println(radPerSec*9.549297);
   }
   else{
     spinIt++;
   }
 
+  //motor.PID_velocity.P = target;
+  
+  serialControl();
 }
