@@ -76,6 +76,7 @@ void serialControl(){
 
 void setup()
 {
+  Serial.begin(115200);
   SimpleFOCDebug::enable();
   motor.linkSensor(&sensor);
 
@@ -140,7 +141,6 @@ void setup()
 	command.add('T',doTarget, "target angle");
 	command.add('M',doMotor,"my motor motion");
 
-  Serial.begin(115200);
   delay(1000);
 
 }
