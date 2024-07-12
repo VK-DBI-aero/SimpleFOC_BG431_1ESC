@@ -85,16 +85,19 @@ void setup()
 
   //initializes the psu and driver
   driver.voltage_power_supply = 14.8;
+  driver.pwm_frequency = 50000;
   driver.init();
 
   motor.linkDriver(&driver);
   motor.voltage_limit = 14.8;
+  //motor.current_limit = 1;
   motor.velocity_limit = 2212;
+  
 
   //Sets up openloop FOC
   motor.controller = MotionControlType::velocity_openloop;
   // set FOC modulation type to sinusoidal
-  motor.foc_modulation = FOCModulationType::SinePWM;
+  motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
 
 
   motor.init();
@@ -115,7 +118,7 @@ void loop()
   //this loop controls the rate at which the motor speeds up
   switch(opMode){
 	case INCREMENT:
-		if (spinIt%spinItSpeed == 0 && radPerSec<mxRads){
+		if (spinIt%spinItSpeed == 0 && radPerSec<1580){
 		radPerSec++;
 		spinIt = 1;
 		}
@@ -135,5 +138,5 @@ void loop()
   }
   //motor.PID_velocity.P = target;
   
-  serialControl();
+  //serialControl();
 }
