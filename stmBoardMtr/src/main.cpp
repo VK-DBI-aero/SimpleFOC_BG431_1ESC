@@ -3,20 +3,27 @@
 #include <string>
 #include "stm32g4xx_hal.h"
 
-//local variable definitions
-float target = 0.0;     // used to change currently tested variable
-int spinIt = 1;         // iterator for the startup
-int spinItSpeed = 1500; // rate of the startup, higher = slower
-float radPerSec = 0;    // driver the motor speed
-int mxRads = 0;         // max motor speed
-int outIt = 0;          //used for communication rate iteration
-String received_chars;
 #define INCREMENT true
 #define DECREMENT false
-bool opMode = true;
+
+//local variable definitions
+int 	spinIt = 1;         // iterator for the startup
+int 	spinItSpeed = 500; // rate of the startup, higher = slower
+int 	mxRads = 0;         // max motor speed
+int 	outIt = 0;          //used for communication rate iteration
+float 	radPerSec = 0;    // driver the motor speed
+float 	target = 0.0;     // used to change currently tested variable
+String 	received_chars = "";
+bool 	opMode = true;
+float	ddZn = 0.0;
+
+
+
 //Set up the motor and driver, motor is 7 pp, .12 phase resistor, and 1400KV 
 BLDCMotor motor = BLDCMotor(7, .12, 1400);
 BLDCDriver6PWM driver = BLDCDriver6PWM(A_PHASE_UH, A_PHASE_UL, A_PHASE_VH, A_PHASE_VL, A_PHASE_WH, A_PHASE_WL);
+
+LowsideCurrentSense currentsense  = LowsideCurrentSense(0.003, -64.0/7.0,A_OP1_OUT, A_OP2_OUT, A_OP3_OUT);
 
 /*controls the motor using the UART. 
 -g starts the motor and revs up to 300 rad/s, 
@@ -33,11 +40,14 @@ void serialControl(){
     {
 	  char command = received_chars[0];
 	  received_chars.remove(0,1);
-      float num = received_chars.toInt();
+      float numInt = received_chars.toInt();
+      float numFlt = received_chars.toFloat();
 	  Serial.print("Command == ");
 	  Serial.println(command);
-	  Serial.print("Num == ");
-	  Serial.println(num);
+	  Serial.print("Num int == ");
+	  Serial.println(numInt);
+	  Serial.print("Num flt == ");
+	  Serial.println(numFlt);
       if(command == 's'){//stop
         radPerSec = 0;
         mxRads = 0;
@@ -52,24 +62,32 @@ void serialControl(){
         Serial.println("Starting Motor.");
         break;
       }
+      else if(command == 'd'){//go
+	  	driver.dead_zone = numFlt;
+		radPerSec = 0;
+        received_chars = "";
+        Serial.print("Setting dead zone to ");
+        Serial.println(numFlt);
+        break;
+      }
 	  else if(command == 't'){
-		if(mxRads < num){
+		if(mxRads < numInt){
 			opMode = INCREMENT;
 		}
 		else{
 			opMode = DECREMENT;
 		}
-		mxRads = num;
+		mxRads = numInt;
 		spinIt = 1;
 
 		Serial.print("Changing target speed to ");
-		Serial.print(num*9.549297);
+		Serial.print(numInt*9.549297);
 		Serial.println("RPM.");
         received_chars = "";
 		break;
 	  }
       else{
-        target = num;
+        target = numInt;
         Serial.print("PID.P = ");
         Serial.println(target);
         received_chars = "";
@@ -84,12 +102,14 @@ void setup()
   SimpleFOCDebug::enable();
 
   //initializes the psu and driver
-  driver.voltage_power_supply = 14.8;
-  driver.pwm_frequency = 50000;
+  driver.voltage_power_supply = 20;
+  driver.pwm_frequency = 20000;
+  //driver.dead_zone = 0.02;
   driver.init();
 
   motor.linkDriver(&driver);
-  motor.voltage_limit = 14.8;
+  currentsense.linkDriver(&driver);  
+  motor.voltage_limit = 20;
   //motor.current_limit = 1;
   motor.velocity_limit = 2212;
   
@@ -97,10 +117,13 @@ void setup()
   //Sets up openloop FOC
   motor.controller = MotionControlType::velocity_openloop;
   // set FOC modulation type to sinusoidal
-  motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
+  motor.foc_modulation = FOCModulationType::SinePWM;
 
 
   motor.init();
+  currentsense.init();
+  motor.linkCurrentSense(&currentsense);
+
 
   motor.initFOC();
 
@@ -118,25 +141,23 @@ void loop()
   //this loop controls the rate at which the motor speeds up
   switch(opMode){
 	case INCREMENT:
-		if (spinIt%spinItSpeed == 0 && radPerSec<1580){
-		radPerSec++;
-		spinIt = 1;
+		if (spinIt%spinItSpeed == 0 && radPerSec<mxRads){
+			radPerSec++;
+			spinIt = 1;
 		}
 		else{
-		spinIt++;
+			spinIt++;
 		}
 		break;
 	case DECREMENT:
 		if (spinIt%spinItSpeed == 0 && radPerSec>=mxRads){
-		radPerSec--;
-		spinIt = 1;
+			radPerSec--;
+			spinIt = 1;
 		}
 		else{
-		spinIt++;
+			spinIt++;
 		}
 		break;
-  }
-  //motor.PID_velocity.P = target;
-  
-  //serialControl();
+  }  
+  serialControl();
 }
